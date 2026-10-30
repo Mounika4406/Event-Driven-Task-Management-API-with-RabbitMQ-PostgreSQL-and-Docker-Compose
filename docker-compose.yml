@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:15-alpine
+    container_name: task_manager_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-task_db}
+      POSTGRES_USER: ${DB_USER:-taskadmin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secretpassword}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-taskadmin} -d ${DB_NAME:-task_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  message_queue:
+    image: rabbitmq:3-management-alpine
+    container_name: task_manager_mq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${MQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${MQ_PASSWORD:-guest}
+    ports:
+      - "${MQ_PORT:-5672}:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      dockerfile: api-service/Dockerfile
+    container_name: task_manager_api
+    restart: always
+    ports:
+      - "${API_PORT:-3000}:${API_PORT:-3000}"
+    environment:
+      - PORT=${API_PORT:-3000}
+      - DB_HOST=database
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-taskadmin}
+      - DB_PASSWORD=${DB_PASSWORD:-secretpassword}
+      - DB_NAME=${DB_NAME:-task_db}
+      - MQ_HOST=message_queue
+      - MQ_PORT=${MQ_PORT:-5672}
+      - MQ_USER=${MQ_USER:-guest}
+      - MQ_PASSWORD=${MQ_PASSWORD:-guest}
+      - NODE_ENV=production
+    depends_on:
+      database:
+        condition: service_healthy
+      message_queue:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${API_PORT:-3000}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker-service/Dockerfile
+    container_name: task_manager_worker
+    restart: always
+    environment:
+      - DB_HOST=database
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-taskadmin}
+      - DB_PASSWORD=${DB_PASSWORD:-secretpassword}
+      - DB_NAME=${DB_NAME:-task_db}
+      - MQ_HOST=message_queue
+      - MQ_PORT=${MQ_PORT:-5672}
+      - MQ_USER=${MQ_USER:-guest}
+      - MQ_PASSWORD=${MQ_PASSWORD:-guest}
+      - NODE_ENV=production
+    depends_on:
+      message_queue:
+        condition: service_healthy
+      database:
+        condition: service_healthy
+
+volumes:
+  db_data:

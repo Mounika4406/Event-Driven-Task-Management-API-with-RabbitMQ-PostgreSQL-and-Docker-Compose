@@ -1,0 +1,20 @@
+{
+  "name": "worker-service",
+  "version": "1.0.0",
+  "description": "Background Worker Service for Event-Driven Task Management",
+  "main": "src/worker.js",
+  "scripts": {
+    "start": "node src/worker.js",
+    "dev": "nodemon src/worker.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "dotenv": "^16.4.7",
+    "event-task-management": "file:..",
+    "pg": "^8.13.1",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
